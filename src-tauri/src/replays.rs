@@ -127,11 +127,18 @@ mod tests {
         fs::create_dir(dir.path().join("subfolder.replay")).unwrap();
         fs::write(dir.path().join("subfolder.replay/nested.replay"), b"nested").unwrap();
         let now = SystemTime::now();
-        fs::File::open(old)
+        fs::OpenOptions::new()
+            .write(true)
+            .open(old)
             .unwrap()
             .set_modified(now - Duration::from_secs(60))
             .unwrap();
-        fs::File::open(recent).unwrap().set_modified(now).unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(recent)
+            .unwrap()
+            .set_modified(now)
+            .unwrap();
         let files = scan_directory(dir.path().to_str().unwrap()).unwrap();
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].file_name, "recent.REPLAY");
