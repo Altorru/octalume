@@ -6,6 +6,7 @@ Avant de soumettre :
 
 ```bash
 npm run check
+npm run test:player
 npm run build
 npm run format:check
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

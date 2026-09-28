@@ -36,7 +36,8 @@ export interface ReplayPlayer {
 }
 
 export interface CoachingReportData {
-  score: number;
+  player: { index: number; name: string; team: number | null };
+  score: number | null;
   gameType: string;
   mistakes: string[];
   summary: string;
@@ -44,4 +45,7 @@ export interface CoachingReportData {
   weaknesses: string[];
   advancedMetrics: { label: string; value: string }[];
   isMock: boolean;
+  provider: string;
+  model: string;
+  analysisScope: "demo" | "header-statistics";
 }

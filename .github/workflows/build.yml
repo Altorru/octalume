@@ -40,6 +40,8 @@ jobs:
         run: npm run format:check
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Test player targeting
+        run: npm run test:player
       - name: Check Rust
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
       - name: Test replay scanner

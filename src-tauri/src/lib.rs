@@ -1,4 +1,7 @@
+mod ai;
+mod analysis_gate;
 pub mod metadata;
+pub mod player;
 pub mod replays;
 mod report;
 
@@ -40,12 +43,13 @@ async fn scan_replays(
 #[tauri::command]
 async fn analyze_replay(
     file_path: String,
-    api_key: String,
+    ai_config: ai::AiConfig,
+    player_target: player::PlayerTarget,
     index: State<'_, ReplayIndex>,
+    gate: State<'_, analysis_gate::AnalysisGate>,
 ) -> Result<CoachingReport, String> {
-    if api_key.trim().is_empty() {
-        return Err("Renseigne une clé API pour tester l'analyse.".into());
-    }
+    let _permit = gate.acquire()?;
+    ai_config.validate()?;
     index.ensure_allowed(&file_path)?;
     let metadata = tauri::async_runtime::spawn_blocking(move || {
         replays::validate_replay(&file_path)?;
@@ -53,15 +57,20 @@ async fn analyze_replay(
     })
     .await
     .map_err(|error| format!("La vérification a échoué : {error}"))??;
-    // Simulation : aucun réseau, aucune validation réelle de clé.
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    Ok(CoachingReport::demo(metadata.game_type))
+    player::validate_target(&metadata.players, &player_target)?;
+    if ai_config.provider == ai::AiProvider::Demo {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        Ok(CoachingReport::demo(metadata.game_type, player_target))
+    } else {
+        ai::analyze(ai_config, metadata, player_target).await
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(ReplayIndex::default())
+        .manage(analysis_gate::AnalysisGate::default())
         .invoke_handler(tauri::generate_handler![
             get_replay_folder_path,
             scan_replays,

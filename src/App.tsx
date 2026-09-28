@@ -1,23 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
+  ArrowLeft,
   ArrowUpRight,
-  FileVideo,
-  FolderOpen,
-  KeyRound,
-  LoaderCircle,
-  RefreshCw,
+  CircleAlert,
+  Library,
+  Settings2,
   ShieldCheck,
   Sparkles,
-  Trash2,
 } from "lucide-react";
-import CoachingReport from "./components/CoachingReport";
-import ReplayDetails, { formatDuration } from "./components/ReplayDetails";
+import ReplayLibrary, { type ReplayFilter } from "./components/ReplayLibrary";
+import ReplayDetails from "./components/ReplayDetails";
+import Settings from "./components/Settings";
+import { playerTarget, uniquePlayerIndex, reportMatchesTarget } from "./player";
+import { providers, savedProvider, type AiProvider } from "./providers";
 import type { CoachingReportData, ReplayFile } from "./types";
 import "./App.css";
 
 const API_KEY_STORAGE = "octalume.apiKey";
 const FOLDER_STORAGE = "octalume.replayFolder";
+const PLAYER_STORAGE = "octalume.playerName";
+const PROVIDER_STORAGE = "octalume.aiProvider";
+type Screen = "library" | "match" | "settings";
 
 function storedValue(key: string): string {
   try {
@@ -26,7 +30,6 @@ function storedValue(key: string): string {
     return "";
   }
 }
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -34,7 +37,42 @@ function errorMessage(error: unknown): string {
 export default function App() {
   const initialized = useRef(false);
   const operation = useRef(false);
-  const [apiKey, setApiKey] = useState(() => storedValue(API_KEY_STORAGE));
+  const [screen, setScreen] = useState<Screen>("library");
+  const [settingsOrigin, setSettingsOrigin] = useState<Screen>("library");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ReplayFilter>("all");
+  const [playerName, setPlayerName] = useState(() =>
+    storedValue(PLAYER_STORAGE),
+  );
+  const [playerStorageError, setPlayerStorageError] = useState<string | null>(
+    null,
+  );
+  const [playerChoices, setPlayerChoices] = useState<
+    Record<string, number | null>
+  >({});
+  const [provider, setProvider] = useState<AiProvider>(() =>
+    savedProvider(storedValue(PROVIDER_STORAGE)),
+  );
+  const [sessionKeys, setSessionKeys] = useState<Record<AiProvider, string>>({
+    demo: "",
+    openai: "",
+    gemini: "",
+    claude: "",
+  });
+  const [models, setModels] = useState<Record<AiProvider, string>>({
+    demo: "",
+    openai: providers.openai.model,
+    gemini: providers.gemini.model,
+    claude: providers.claude.model,
+  });
+  const apiKey = sessionKeys[provider];
+  const model = models[provider];
+  function setApiKey(value: string) {
+    setSessionKeys((keys) => ({ ...keys, [provider]: value }));
+  }
+  function setModel(value: string) {
+    setModels((values) => ({ ...values, [provider]: value }));
+  }
   const [folderPath, setFolderPath] = useState(() =>
     storedValue(FOLDER_STORAGE),
   );
@@ -42,32 +80,60 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [analyzingPath, setAnalyzingPath] = useState<string | null>(null);
   const [report, setReport] = useState<CoachingReportData | null>(null);
-  const [reportFile, setReportFile] = useState("");
+  const [reportPath, setReportPath] = useState("");
   const [selectedReplay, setSelectedReplay] = useState<ReplayFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<Date | null>(null);
   const busy = scanning || analyzingPath !== null;
+  const selectedPlayerIndex = selectedReplay
+    ? selectedReplay.filePath in playerChoices
+      ? playerChoices[selectedReplay.filePath]
+      : uniquePlayerIndex(selectedReplay.metadata?.players ?? [], playerName)
+    : null;
+  const target = playerTarget(
+    selectedReplay?.metadata?.players ?? [],
+    selectedPlayerIndex,
+  );
 
   useEffect(() => {
     try {
-      if (apiKey) localStorage.setItem(API_KEY_STORAGE, apiKey);
-      else localStorage.removeItem(API_KEY_STORAGE);
+      if (playerName.trim())
+        localStorage.setItem(PLAYER_STORAGE, playerName.trim());
+      else localStorage.removeItem(PLAYER_STORAGE);
+      setPlayerStorageError(null);
+    } catch {
+      setPlayerStorageError(
+        "Le pseudo reste utilisable, mais son enregistrement a échoué.",
+      );
+    }
+  }, [playerName]);
+
+  function changePlayerName(value: string) {
+    setPlayerName(value);
+    setPlayerChoices({});
+  }
+
+  useEffect(() => {
+    try {
+      // Migration : l'ancien prototype conservait une clé en clair. Ne jamais la relire ni l'envoyer.
+      localStorage.removeItem(API_KEY_STORAGE);
+      localStorage.setItem(PROVIDER_STORAGE, provider);
       setStorageError(null);
     } catch {
       setStorageError(
-        "La clé reste utilisable, mais son enregistrement local a échoué.",
+        "Impossible de nettoyer l'ancien stockage ou de mémoriser le fournisseur. Efface les données locales du prototype avant d'utiliser une vraie clé.",
       );
     }
-  }, [apiKey]);
+  }, [provider]);
 
   useEffect(() => {
-    // React StrictMode rejoue les effets en développement, pas le scan.
+    // StrictMode ne doit pas déclencher une deuxième lecture du dossier.
     if (initialized.current) return;
     initialized.current = true;
     if (!isTauri()) {
       setError(
-        "Cette page est une prévisualisation. Lance npm run tauri dev pour lire tes replays.",
+        "Prévisualisation web : lance npm run tauri dev pour lire tes replays.",
       );
       return;
     }
@@ -91,13 +157,26 @@ export default function App() {
     void initialize();
   }, []);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    document.getElementById("screen-title")?.focus({ preventScroll: true });
+  }, [screen, selectedReplay?.filePath]);
+
+  function openSettings() {
+    if (screen !== "settings") setSettingsOrigin(screen);
+    setScreen("settings");
+  }
+
   async function refresh() {
-    if (operation.current) return;
+    if (operation.current || !folderPath.trim()) return;
     operation.current = true;
     setScanning(true);
     setError(null);
     setReport(null);
+    setReportPath("");
     setSelectedReplay(null);
+    setPlayerChoices({});
+    setSettingsOrigin("library");
     setReplays([]);
     setLastScan(null);
     try {
@@ -107,7 +186,7 @@ export default function App() {
       try {
         localStorage.setItem(FOLDER_STORAGE, path);
       } catch {
-        /* Le scan reste utilisable. */
+        /* Scan utilisable sans persistance. */
       }
     } catch (cause) {
       setError(errorMessage(cause));
@@ -117,19 +196,43 @@ export default function App() {
     }
   }
 
-  async function analyze(replay: ReplayFile) {
-    if (operation.current) return;
+  function openReplay(replay: ReplayFile) {
+    if (!replay.metadata || replay.parseError) return;
+    setSelectedReplay(replay);
+    setError(null);
+    setScreen("match");
+  }
+
+  async function analyze(replay: ReplayFile, consent: boolean) {
+    if (
+      operation.current ||
+      (provider !== "demo" &&
+        (!apiKey.trim() || !consent || Boolean(storageError))) ||
+      !replay.metadata ||
+      replay.parseError ||
+      !target ||
+      selectedReplay?.filePath !== replay.filePath
+    )
+      return;
     operation.current = true;
     setAnalyzingPath(replay.filePath);
     setError(null);
     setReport(null);
+    setReportPath("");
     setSelectedReplay(replay);
+    setScreen("match");
     try {
       const result = await invoke<CoachingReportData>("analyze_replay", {
         filePath: replay.filePath,
-        apiKey: apiKey.trim(),
+        aiConfig: {
+          provider,
+          model: model.trim(),
+          apiKey: apiKey.trim(),
+          consent,
+        },
+        playerTarget: target,
       });
-      setReportFile(replay.fileName);
+      setReportPath(replay.filePath);
       setReport(result);
     } catch (cause) {
       setError(errorMessage(cause));
@@ -140,310 +243,181 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-slate-950/60">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-cyan-300 text-slate-950">
-              <Sparkles size={22} aria-hidden="true" />
-            </span>
-            <span className="text-xl font-bold tracking-tight">
-              Octalume
-              <span className="ml-3 text-xs font-normal text-slate-500">
-                PREVIEW 0.1
-              </span>
-            </span>
+    <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Aller au contenu
+      </a>
+      <aside className="app-sidebar">
+        <button
+          className="brand"
+          onClick={() => setScreen("library")}
+          aria-label="Octalume — ouvrir la bibliothèque"
+        >
+          <span className="brand-mark">
+            <Sparkles size={23} aria-hidden="true" />
+          </span>
+          <span>
+            octalume<span className="brand-subtitle">REPLAY INTELLIGENCE</span>
+          </span>
+        </button>
+        <p className="nav-label">TON ESPACE</p>
+        <nav aria-label="Navigation principale" className="main-nav">
+          <button
+            className={`nav-item ${screen !== "settings" ? "active" : ""}`}
+            aria-current={screen !== "settings" ? "page" : undefined}
+            onClick={() => setScreen("library")}
+          >
+            <Library size={18} aria-hidden="true" /> Bibliothèque{" "}
+            <span className="nav-count">{replays.length}</span>
+          </button>
+          <button
+            className={`nav-item ${screen === "settings" ? "active" : ""}`}
+            aria-current={screen === "settings" ? "page" : undefined}
+            onClick={openSettings}
+          >
+            <Settings2 size={18} aria-hidden="true" /> Réglages
+          </button>
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="privacy-note">
+            <ShieldCheck size={18} aria-hidden="true" />
+            <div>
+              <strong>Ton jeu. Tes fichiers.</strong>
+              <p>Lecture locale, uniquement sur demande.</p>
+            </div>
           </div>
-          <span className="flex items-center gap-2 text-xs text-slate-400">
-            <ShieldCheck
-              size={16}
-              className="text-emerald-400"
-              aria-hidden="true"
-            />
-            Lecture locale, sur demande
+          <span className="version-label">
+            <span className="status-dot" /> CLIENT OPEN SOURCE <span>v0.1</span>
           </span>
         </div>
-      </header>
-      <main className="mx-auto max-w-7xl space-y-8 px-6 py-10">
-        <section className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="eyebrow text-cyan-300">REPLAY INTELLIGENCE</p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
-              Chaque match a quelque chose à t'apprendre.
-            </h1>
-            <p className="mt-4 max-w-2xl leading-relaxed text-slate-400">
-              Retrouve tes replays et transforme tes décisions en pistes de
-              progression.
-            </p>
+      </aside>
+      <div className="app-workspace">
+        <header className="topbar">
+          <div className="breadcrumbs">
+            <span>Ton espace</span>
+            <span>/</span>
+            <strong>
+              {screen === "settings"
+                ? "Réglages"
+                : screen === "match"
+                  ? "Détails du match"
+                  : "Bibliothèque"}
+            </strong>
           </div>
-        </section>
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside
-            className="panel h-fit space-y-6 p-6"
-            aria-labelledby="settings-title"
-          >
-            <h2 id="settings-title" className="text-lg font-semibold">
-              Ton espace de jeu
-            </h2>
-            <div>
-              <label
-                htmlFor="api-key"
-                className="mb-2 flex items-center gap-2 text-sm font-medium"
-              >
-                <KeyRound size={16} aria-hidden="true" />
-                Clé API
-              </label>
-              <input
-                id="api-key"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="Clé de démonstration"
-                className="input"
-              />
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Une valeur non vide suffit pour tester. Stockage en clair sur
-                cet appareil pour ce prototype.
-              </p>
-              <button
-                type="button"
-                onClick={() => setApiKey("")}
-                disabled={!apiKey}
-                className="mt-3 inline-flex items-center gap-2 text-xs text-slate-400 hover:text-white disabled:opacity-40"
-              >
-                <Trash2 size={14} aria-hidden="true" />
-                Oublier la clé
-              </button>
-              {storageError && (
-                <p role="alert" className="mt-2 text-xs text-amber-300">
-                  {storageError}
-                </p>
-              )}
-            </div>
-            <div>
-              <label
-                htmlFor="replay-folder"
-                className="mb-2 flex items-center gap-2 text-sm font-medium"
-              >
-                <FolderOpen size={16} aria-hidden="true" />
-                Dossier des replays
-              </label>
-              <input
-                id="replay-folder"
-                value={folderPath}
-                disabled={busy}
-                spellCheck={false}
-                onChange={(event) => setFolderPath(event.target.value)}
-                placeholder="Chemin vers TAGame/Demos"
-                className="input"
-              />
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Le dossier est lu au lancement et quand tu rafraîchis la liste.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              disabled={busy || !folderPath.trim()}
-              className="button-primary w-full"
-            >
-              <RefreshCw
-                size={16}
-                aria-hidden="true"
-                className={scanning ? "animate-spin" : ""}
-              />
-              {scanning ? "Lecture du dossier…" : "Rafraîchir la liste"}
-            </button>
-            <div className="border-t border-white/10 pt-5 text-xs leading-relaxed text-slate-500">
-              Aucun watcher. Aucune injection dans le jeu. Aucun replay transmis
-              dans cette version.
-            </div>
-          </aside>
-          <section
-            className="min-w-0 space-y-5"
-            aria-labelledby="replays-title"
-            aria-busy={busy}
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <div className="panel p-5">
-                <p className="eyebrow">REPLAYS LOCAUX</p>
-                <p className="mt-2 text-3xl font-semibold">{replays.length}</p>
-              </div>
-              <div className="panel p-5">
-                <p className="eyebrow">DERNIÈRE LECTURE</p>
-                <p className="mt-3 text-lg font-medium">
-                  {scanning
-                    ? "En cours…"
-                    : lastScan
-                      ? lastScan.toLocaleTimeString("fr-FR")
-                      : "À effectuer"}
-                </p>
+          <span className="local-badge">
+            <span className="status-dot" /> Local & privé
+          </span>
+        </header>
+        <main
+          id="main-content"
+          className={`page-content ${screen === "match" ? "match-page" : ""}`}
+        >
+          {error && (
+            <div role="alert" className="notice notice-error">
+              <CircleAlert size={18} aria-hidden="true" />
+              <div>
+                <strong>Impossible de terminer cette action</strong>
+                <p>{error}</p>
               </div>
             </div>
-            {error && (
-              <p
-                role="alert"
-                className="rounded-xl border border-rose-400/20 bg-rose-400/5 p-4 text-sm text-rose-300"
-              >
-                {error}
-              </p>
-            )}
-            <div className="panel overflow-hidden">
-              <div className="border-b border-white/10 p-5">
-                <h2 id="replays-title" className="text-lg font-semibold">
-                  Bibliothèque de replays
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Les plus récemment modifiés apparaissent en premier.
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <caption className="sr-only">
-                    Replays locaux triés par date de modification décroissante
-                  </caption>
-                  <thead className="bg-slate-950/40 text-xs text-slate-500">
-                    <tr>
-                      <th scope="col" className="p-4">
-                        Fichier
-                      </th>
-                      <th scope="col" className="p-4">
-                        Modifié le
-                      </th>
-                      <th scope="col" className="p-4">
-                        Taille
-                      </th>
-                      <th scope="col" className="p-4">
-                        Game Type
-                      </th>
-                      <th scope="col" className="p-4">
-                        Analyse
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {replays.map((replay) => (
-                      <tr
-                        key={replay.filePath}
-                        className="border-t border-white/5"
-                      >
-                        <td className="max-w-48 break-all p-4 font-medium">
-                          {replay.metadata?.replayName || replay.fileName}
-                          {replay.metadata && (
-                            <p className="mt-1 text-xs font-normal text-slate-500">
-                              {replay.metadata.blueScore ?? "—"} –{" "}
-                              {replay.metadata.orangeScore ?? "—"} ·{" "}
-                              {replay.metadata.durationIsEstimate ? "≈ " : ""}
-                              {formatDuration(replay.metadata.durationSeconds)}
-                            </p>
-                          )}
-                          {replay.parseError && (
-                            <p className="mt-2 text-xs font-normal leading-relaxed text-rose-300">
-                              {replay.parseError}
-                            </p>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap p-4 text-xs text-slate-400">
-                          {new Date(replay.modifiedAt * 1000).toLocaleString(
-                            "fr-FR",
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap p-4 text-slate-400">
-                          {(replay.sizeBytes / 1024 / 1024).toFixed(2)} Mio
-                        </td>
-                        <td className="p-4 text-slate-400">
-                          {replay.gameType ?? "Illisible"}
-                        </td>
-                        <td className="p-4">
-                          <button
-                            type="button"
-                            disabled={!replay.metadata || busy}
-                            onClick={() => setSelectedReplay(replay)}
-                            className="mb-2 block text-xs text-cyan-300 hover:text-cyan-200 disabled:opacity-40"
-                          >
-                            Détails du match
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void analyze(replay)}
-                            disabled={
-                              busy ||
-                              !apiKey.trim() ||
-                              !replay.metadata ||
-                              Boolean(replay.parseError)
-                            }
-                            className="button-primary"
-                          >
-                            {analyzingPath === replay.filePath ? (
-                              <LoaderCircle
-                                size={16}
-                                className="animate-spin"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <ArrowUpRight size={16} aria-hidden="true" />
-                            )}
-                            {analyzingPath === replay.filePath
-                              ? "Analyse…"
-                              : "Analyser"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {replays.length === 0 && (
-                <div className="flex flex-col items-center px-6 py-16 text-center">
-                  <FileVideo
-                    size={36}
-                    className="mb-5 text-slate-600"
-                    aria-hidden="true"
-                  />
-                  <p className="font-medium">
-                    {scanning
-                      ? "Lecture de tes replays…"
-                      : "Ta prochaine progression commence ici."}
-                  </p>
-                  <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
-                    {scanning
-                      ? "Le dossier est lu une seule fois."
-                      : "Enregistre un replay dans Rocket League, indique son dossier puis rafraîchis la liste."}
-                  </p>
-                </div>
-              )}
-            </div>
-            {selectedReplay && (
-              <ReplayDetails
-                replay={selectedReplay}
-                onClose={() => setSelectedReplay(null)}
-              />
-            )}
-          </section>
-        </div>
-        <div aria-live="polite">
-          {report && (
-            <section className="space-y-4">
-              <h2 className="break-all text-xl font-semibold">
-                Rapport · {reportFile}
-              </h2>
-              {report.isMock && (
-                <p className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm text-amber-300">
-                  Le type de match provient du replay. Le score de coaching, les
-                  conseils et les métriques avancées restent fictifs pour cette
-                  démonstration. Aucun appel à une API n'a eu lieu.
-                </p>
-              )}
-              <CoachingReport report={report} />
-            </section>
           )}
-        </div>
-        <footer className="border-t border-white/5 pt-6 text-xs text-slate-600">
-          Octalume · Client open source · Indépendant de Psyonix et Epic Games
-        </footer>
-      </main>
+          {screen === "library" && (
+            <ReplayLibrary
+              replays={replays}
+              scanning={scanning}
+              busy={busy}
+              lastScan={lastScan}
+              folderPath={folderPath}
+              hasError={Boolean(error)}
+              query={query}
+              filter={filter}
+              onQuery={setQuery}
+              onFilter={setFilter}
+              onRefresh={() => void refresh()}
+              onSettings={openSettings}
+              onOpen={openReplay}
+            />
+          )}
+          {screen === "settings" && (
+            <>
+              <button
+                className="back-link"
+                onClick={() =>
+                  setScreen(
+                    settingsOrigin === "match" && selectedReplay
+                      ? "match"
+                      : "library",
+                  )
+                }
+              >
+                <ArrowLeft size={16} aria-hidden="true" />
+                {settingsOrigin === "match" && selectedReplay
+                  ? "Retour au match"
+                  : "Retour à la bibliothèque"}
+              </button>
+              <Settings
+                apiKey={apiKey}
+                provider={provider}
+                onProvider={setProvider}
+                model={model}
+                onModel={setModel}
+                playerName={playerName}
+                onPlayerName={changePlayerName}
+                playerStorageError={playerStorageError}
+                onApiKey={setApiKey}
+                folderPath={folderPath}
+                onFolderPath={setFolderPath}
+                busy={busy}
+                scanning={scanning}
+                storageError={storageError}
+                onRefresh={() => void refresh()}
+                onLibrary={() => setScreen("library")}
+              />
+            </>
+          )}
+          {screen === "match" && selectedReplay && (
+            <ReplayDetails
+              key={selectedReplay.filePath}
+              replay={selectedReplay}
+              report={
+                reportMatchesTarget(
+                  report,
+                  reportPath,
+                  selectedReplay.filePath,
+                  target,
+                )
+                  ? report
+                  : null
+              }
+              playerName={playerName}
+              selectedPlayerIndex={selectedPlayerIndex}
+              onPlayerSelect={(index) =>
+                setPlayerChoices((choices) => ({
+                  ...choices,
+                  [selectedReplay.filePath]: index,
+                }))
+              }
+              analyzing={analyzingPath === selectedReplay.filePath}
+              busy={busy}
+              provider={provider}
+              model={model}
+              hasApiKey={
+                provider === "demo" || (Boolean(apiKey.trim()) && !storageError)
+              }
+              onBack={() => setScreen("library")}
+              onAnalyze={(consent) => void analyze(selectedReplay, consent)}
+              onSettings={openSettings}
+            />
+          )}
+          <footer className="app-footer">
+            <span>Conçu pour comprendre. Jouer pour progresser.</span>
+            <span>
+              Indépendant de Psyonix & Epic Games{" "}
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </span>
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }
