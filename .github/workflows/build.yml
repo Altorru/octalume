@@ -47,7 +47,7 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
           cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build Windows installers
-        run: npm run tauri -- build --bundles msi,nsis
+        run: npm run tauri -- build
       - name: Upload installers for every build
         uses: actions/upload-artifact@v4
         with:

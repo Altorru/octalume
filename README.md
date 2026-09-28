@@ -135,7 +135,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --example inspect_replays -- .loc
 Depuis Windows :
 
 ```bash
-npm run tauri -- build --bundles msi,nsis
+npm run tauri -- build
 ```
 
 Installateurs : `src-tauri/target/release/bundle/msi/` et `src-tauri/target/release/bundle/nsis/`.
