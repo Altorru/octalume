@@ -66,6 +66,10 @@ fn number(properties: &Properties, name: &str) -> Option<f64> {
 }
 
 pub fn parse_file(path: &Path) -> Result<ReplayMetadata, String> {
+    parse_bytes(&read_file(path)?)
+}
+
+pub(crate) fn read_file(path: &Path) -> Result<Vec<u8>, String> {
     let metadata =
         fs::symlink_metadata(path).map_err(|error| format!("Replay inaccessible : {error}"))?;
     if !metadata.file_type().is_file() || metadata.len() == 0 {
@@ -84,7 +88,7 @@ pub fn parse_file(path: &Path) -> Result<ReplayMetadata, String> {
     if data.len() as u64 > MAX_REPLAY_BYTES {
         return Err("Replay trop volumineux (limite : 128 Mio).".into());
     }
-    parse_bytes(&data)
+    Ok(data)
 }
 
 pub fn parse_bytes(data: &[u8]) -> Result<ReplayMetadata, String> {
@@ -99,7 +103,7 @@ pub fn parse_bytes(data: &[u8]) -> Result<ReplayMetadata, String> {
     Ok(extract_metadata(&replay.properties))
 }
 
-fn extract_metadata(properties: &Properties) -> ReplayMetadata {
+pub(crate) fn extract_metadata(properties: &Properties) -> ReplayMetadata {
     let players = property(properties, "PlayerStats")
         .and_then(HeaderProp::as_array)
         .map(|entries| {

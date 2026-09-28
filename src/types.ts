@@ -43,9 +43,64 @@ export interface CoachingReportData {
   summary: string;
   strengths: string[];
   weaknesses: string[];
-  advancedMetrics: { label: string; value: string }[];
+  advancedMetrics: { label: string; value: string; source: string }[];
+  scoreRationale: string;
+  confidence: "low" | "medium" | "high";
+  findings: CoachingFinding[];
+  dimensions: { name: string; score: number | null; rationale: string }[];
+  trainingPlan: string[];
+  dataQuality: GameplayQuality | null;
   isMock: boolean;
   provider: string;
   model: string;
-  analysisScope: "demo" | "header-statistics";
+  analysisScope: "demo" | "network-gameplay";
+}
+
+export interface GameplayQuality {
+  decodedFrames: number;
+  recordingSeconds: number;
+  activeSeconds: number;
+  targetObservedSeconds: number;
+  spatialObservedSeconds: number;
+  coveragePercent: number;
+  completeSpatialPercent: number;
+  timelineIntervalSeconds: number;
+  timelineSamples: number;
+  standardSoccar: boolean;
+  canAssess: boolean;
+  warnings: string[];
+}
+export interface GameplayMetric {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  measuredSeconds: number;
+  method: string;
+}
+export interface GameplayEvidence {
+  id: string;
+  time: number;
+  endTime: number;
+  kind: string;
+  facts: string;
+  heuristic: boolean;
+}
+export interface GameplayPreview {
+  quality: GameplayQuality;
+  metrics: GameplayMetric[];
+  evidence: GameplayEvidence[];
+  payloadBytes: number;
+}
+export interface CoachingFinding {
+  evidenceId: string;
+  time: number;
+  endTime: number;
+  facts: string;
+  heuristic: boolean;
+  observation: string;
+  impact: string;
+  correction: string;
+  drill: string;
+  confidence: "low" | "medium" | "high";
 }

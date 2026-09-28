@@ -14,6 +14,7 @@ import {
 import type { CoachingReportData, ReplayFile } from "../types";
 import CoachingReport from "./CoachingReport";
 import PlayerFocus from "./PlayerFocus";
+import GameplayPanel from "./GameplayPanel";
 import { playerTarget } from "../player";
 import { providers, type AiProvider } from "../providers";
 
@@ -27,7 +28,7 @@ export default function ReplayDetails({
   replay,
   report,
   analyzing,
-  busy,
+  busy: appBusy,
   hasApiKey,
   provider,
   model,
@@ -53,6 +54,8 @@ export default function ReplayDetails({
   onSettings: () => void;
 }) {
   const [view, setView] = useState<"overview" | "coaching">("overview");
+  const [preparing, setPreparing] = useState(false);
+  const busy = appBusy || preparing;
   const [consentFor, setConsentFor] = useState<string | null>(null);
   const consentScope = JSON.stringify([provider, model, selectedPlayerIndex]);
   const consent = consentFor === consentScope;
@@ -152,6 +155,12 @@ export default function ReplayDetails({
         onSelect={onPlayerSelect}
         onSettings={onSettings}
       />
+      <GameplayPanel
+        filePath={replay.filePath}
+        target={target}
+        busy={busy}
+        onPreparing={setPreparing}
+      />
       {provider !== "demo" && (
         <div className="analysis-consent">
           <label>
@@ -164,16 +173,19 @@ export default function ReplayDetails({
               }
             />
             <span>
-              J’autorise l’envoi des statistiques de{" "}
+              J’autorise l’envoi du dossier gameplay de{" "}
               <strong>{target?.name ?? "mon joueur à sélectionner"}</strong> à{" "}
               {providers[provider].label} ({model}) avec ma clé API. Cet appel
               peut être facturé par le fournisseur.
             </span>
           </label>
           <p>
-            Envoi : équipe, score, buts, passes, arrêts, tirs, scores d’équipes,
-            type et durée enregistrée du match. Aucun pseudo, chemin ou fichier
-            replay.
+            Envoi : métriques déterministes, positions et vitesses du ballon et
+            des joueurs pseudonymisés, boost, chronologie et séquences de buts.
+            Les coéquipiers et adversaires servent au contexte tactique de ton
+            joueur. Aucun pseudo, identifiant de compte, chemin ou fichier
+            replay. Ce dossier est plus volumineux et peut augmenter le coût de
+            l’appel.
           </p>
         </div>
       )}
@@ -343,7 +355,7 @@ export default function ReplayDetails({
               <span className="demo-caption">
                 {provider === "demo"
                   ? "Démonstration · conseils simulés"
-                  : "IA réelle · statistiques uniquement"}
+                  : "Gameplay déterministe + coaching IA"}
               </span>
             </section>
             <section className="match-file-card">
@@ -423,7 +435,7 @@ export default function ReplayDetails({
               <p>
                 {provider === "demo"
                   ? "Le replay est validé localement. Le coaching est simulé."
-                  : "Le fournisseur prépare un retour sur les statistiques de ton joueur. Cela peut prendre jusqu’à 60 secondes."}
+                  : "Rust décode le gameplay et calcule les métriques, puis le fournisseur analyse les séquences de ton joueur. L’appel IA peut prendre jusqu’à 120 secondes."}
               </p>
             </div>
           ) : report ? (
@@ -433,7 +445,7 @@ export default function ReplayDetails({
                 <p>
                   {report.isMock
                     ? "Le type de match est réel. Le score, les conseils et les métriques ci-dessous sont fictifs. Aucun appel API n’a eu lieu."
-                    : `Analyse IA réelle de ${report.player.name}, limitée aux statistiques. Les conseils restent des hypothèses à vérifier ; les rotations, le boost et les actions horodatées ne sont pas observés.`}
+                    : `Coaching de ${report.player.name} sur les frames réseau : métriques locales et interprétations IA. Les timestamps cités proviennent du replay. Les signaux géométriques ne prouvent pas, seuls, une erreur de rotation. La note est une appréciation subjective, non calibrée sur un rang.`}
                 </p>
               </div>
               <CoachingReport report={report} />
@@ -450,7 +462,7 @@ export default function ReplayDetails({
               <p>
                 {provider === "demo"
                   ? "Essaie le parcours avec un rapport fictif, sans appel réseau."
-                  : "Demande un vrai retour IA sur les statistiques de ton joueur. Aucun score global ni événement de gameplay ne sera inventé à partir de ces seuls compteurs."}
+                  : "Le coach reçoit les métriques locales, une chronologie sur tout l’enregistrement et des séquences contextualisées. Il explique les décisions à améliorer, leurs impacts et des exercices ciblés, avec les limites des données."}
               </p>
               <button
                 className="button-primary"
@@ -469,7 +481,7 @@ export default function ReplayDetails({
               <span className="demo-caption">
                 {provider === "demo"
                   ? "Aucun transfert · environ 2 secondes"
-                  : `Statistiques anonymisées → ${providers[provider].host}`}
+                  : `Dossier gameplay pseudonymisé → ${providers[provider].host}`}
               </span>
             </div>
           )}

@@ -1,24 +1,18 @@
 import {
   ArrowRight,
   FolderOpen,
-  KeyRound,
   RefreshCw,
   ShieldCheck,
-  Trash2,
   UserRound,
 } from "lucide-react";
-import { providers, type AiProvider } from "../providers";
+import AiSettings from "./AiSettings";
+import type { AiSettingsState } from "../useAiSettings";
 
 export default function Settings({
-  apiKey,
+  ai,
   playerName,
   onPlayerName,
   playerStorageError,
-  provider,
-  onProvider,
-  model,
-  onModel,
-  onApiKey,
   folderPath,
   onFolderPath,
   busy,
@@ -27,15 +21,10 @@ export default function Settings({
   onRefresh,
   onLibrary,
 }: {
-  apiKey: string;
+  ai: AiSettingsState;
   playerName: string;
   onPlayerName: (value: string) => void;
   playerStorageError: string | null;
-  provider: AiProvider;
-  onProvider: (provider: AiProvider) => void;
-  model: string;
-  onModel: (value: string) => void;
-  onApiKey: (value: string) => void;
   folderPath: string;
   onFolderPath: (value: string) => void;
   busy: boolean;
@@ -79,7 +68,7 @@ export default function Settings({
               className="input"
               value={playerName}
               disabled={busy}
-              onChange={(event) => onPlayerName(event.target.value)}
+              onChange={(e) => onPlayerName(e.target.value)}
               placeholder="Ton pseudo Steam ou Epic"
               autoComplete="off"
               spellCheck={false}
@@ -118,12 +107,11 @@ export default function Settings({
             </label>
             <input
               id="replay-folder"
-              aria-label="Dossier des replays"
               className="input"
               value={folderPath}
               disabled={busy}
               spellCheck={false}
-              onChange={(event) => onFolderPath(event.target.value)}
+              onChange={(e) => onFolderPath(e.target.value)}
               placeholder="Chemin vers TAGame/Demos"
             />
             <p className="field-help">
@@ -148,116 +136,7 @@ export default function Settings({
               </button>
             </div>
           </section>
-          <section className="settings-card" aria-labelledby="api-title">
-            <div className="settings-card-heading">
-              <span className="setting-icon">
-                <KeyRound size={21} aria-hidden="true" />
-              </span>
-              <div>
-                <h2 id="api-title">Le coaching IA</h2>
-                <p>
-                  Ton fournisseur et ta propre clé. Aucun serveur Octalume
-                  intermédiaire.
-                </p>
-              </div>
-              <span className="pill">BYOK</span>
-            </div>
-            <label htmlFor="ai-provider" className="field-label">
-              Fournisseur IA
-            </label>
-            <select
-              id="ai-provider"
-              className="input"
-              value={provider}
-              disabled={busy}
-              onChange={(event) => onProvider(event.target.value as AiProvider)}
-            >
-              {Object.entries(providers).map(([value, info]) => (
-                <option key={value} value={value}>
-                  {info.label}
-                </option>
-              ))}
-            </select>
-            <p className="field-help">
-              Démonstration : aucun réseau. Fournisseur réel : appel direct et
-              facturé sur ton compte API, après consentement pour chaque match.
-            </p>
-            {provider !== "demo" && (
-              <>
-                <label htmlFor="ai-model" className="field-label mt-5">
-                  Modèle
-                </label>
-                <input
-                  id="ai-model"
-                  className="input"
-                  value={model}
-                  disabled={busy}
-                  onChange={(event) => onModel(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  maxLength={128}
-                />
-                <p className="field-help">
-                  Identifiant disponible sur ton compte et compatible avec les
-                  sorties JSON structurées. Les modèles proposés ne garantissent
-                  pas l’accès de ton compte.
-                </p>
-                <label htmlFor="api-key" className="field-label mt-5">
-                  Clé API
-                </label>
-                <input
-                  id="api-key"
-                  aria-label="Clé API"
-                  type="password"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={apiKey}
-                  disabled={busy}
-                  onChange={(event) => onApiKey(event.target.value)}
-                  placeholder={`Ta clé ${providers[provider].label}`}
-                  className="input"
-                />
-                <p className="field-help">
-                  Clé conservée uniquement en mémoire pour cette session. Elle
-                  n’est jamais enregistrée sur disque et reste séparée des clés
-                  des autres fournisseurs.
-                </p>
-                <div className="key-status">
-                  <span
-                    className={
-                      apiKey.trim() ? "status-dot" : "status-dot inactive"
-                    }
-                  />
-                  <span>
-                    {apiKey.trim()
-                      ? "Clé renseignée · validation lors du premier appel"
-                      : "Aucune clé renseignée"}
-                  </span>
-                  <button
-                    className="button-quiet"
-                    onClick={() => onApiKey("")}
-                    disabled={!apiKey || busy}
-                    aria-label="Oublier la clé API"
-                  >
-                    <Trash2 size={14} aria-hidden="true" /> Oublier la clé
-                  </button>
-                </div>
-              </>
-            )}
-            {storageError && (
-              <p role="alert" className="parse-error">
-                {storageError}
-              </p>
-            )}
-            <div className="notice notice-warning">
-              <ShieldCheck size={17} aria-hidden="true" />
-              <p>
-                {provider === "demo"
-                  ? "Mode local : aucun secret nécessaire, conseils et note fictifs."
-                  : `Les statistiques du joueur choisi et le contexte du match seront envoyés à ${providers[provider].host}. Aucun fichier replay ni pseudo ne sera envoyé. Les règles de conservation du fournisseur s’appliquent. La facturation API est distincte d’un abonnement à son application de chat.`}
-              </p>
-            </div>
-          </section>
+          <AiSettings ai={ai} busy={busy} storageError={storageError} />
         </div>
         <aside className="settings-privacy">
           <ShieldCheck size={28} aria-hidden="true" />
@@ -271,8 +150,8 @@ export default function Settings({
             <li>Aucune surveillance du dossier.</li>
             <li>Aucun fichier replay envoyé.</li>
             <li>
-              Statistiques envoyées uniquement après ton accord au fournisseur
-              choisi.
+              Données gameplay envoyées uniquement après ton accord au
+              fournisseur choisi.
             </li>
           </ul>
           <p className="privacy-disclaimer">

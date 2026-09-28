@@ -14,7 +14,7 @@
     "check": "tsc --noEmit",
     "fixtures:download": "node scripts/download-test-replays.mjs",
     "test:replays": "cargo test --manifest-path src-tauri/Cargo.toml --locked --test real_replays -- --include-ignored",
-    "test:player": "node --experimental-strip-types --test scripts/player.test.mjs",
+    "test:player": "node --experimental-strip-types --test scripts/player.test.mjs scripts/ai-settings.test.mjs",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "tauri": "tauri"

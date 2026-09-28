@@ -13,7 +13,7 @@ import ReplayLibrary, { type ReplayFilter } from "./components/ReplayLibrary";
 import ReplayDetails from "./components/ReplayDetails";
 import Settings from "./components/Settings";
 import { playerTarget, uniquePlayerIndex, reportMatchesTarget } from "./player";
-import { providers, savedProvider, type AiProvider } from "./providers";
+import { useAiSettings } from "./useAiSettings";
 import type { CoachingReportData, ReplayFile } from "./types";
 import "./App.css";
 
@@ -50,29 +50,8 @@ export default function App() {
   const [playerChoices, setPlayerChoices] = useState<
     Record<string, number | null>
   >({});
-  const [provider, setProvider] = useState<AiProvider>(() =>
-    savedProvider(storedValue(PROVIDER_STORAGE)),
-  );
-  const [sessionKeys, setSessionKeys] = useState<Record<AiProvider, string>>({
-    demo: "",
-    openai: "",
-    gemini: "",
-    claude: "",
-  });
-  const [models, setModels] = useState<Record<AiProvider, string>>({
-    demo: "",
-    openai: providers.openai.model,
-    gemini: providers.gemini.model,
-    claude: providers.claude.model,
-  });
-  const apiKey = sessionKeys[provider];
-  const model = models[provider];
-  function setApiKey(value: string) {
-    setSessionKeys((keys) => ({ ...keys, [provider]: value }));
-  }
-  function setModel(value: string) {
-    setModels((values) => ({ ...values, [provider]: value }));
-  }
+  const ai = useAiSettings();
+  const { provider, apiKey, model } = ai;
   const [folderPath, setFolderPath] = useState(() =>
     storedValue(FOLDER_STORAGE),
   );
@@ -85,7 +64,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<Date | null>(null);
-  const busy = scanning || analyzingPath !== null;
+  const busy = scanning || analyzingPath !== null || ai.loading;
   const selectedPlayerIndex = selectedReplay
     ? selectedReplay.filePath in playerChoices
       ? playerChoices[selectedReplay.filePath]
@@ -207,7 +186,8 @@ export default function App() {
     if (
       operation.current ||
       (provider !== "demo" &&
-        (!apiKey.trim() || !consent || Boolean(storageError))) ||
+        (!ai.ready || !consent || Boolean(storageError))) ||
+      ai.loading ||
       !replay.metadata ||
       replay.parseError ||
       !target ||
@@ -356,15 +336,10 @@ export default function App() {
                   : "Retour à la bibliothèque"}
               </button>
               <Settings
-                apiKey={apiKey}
-                provider={provider}
-                onProvider={setProvider}
-                model={model}
-                onModel={setModel}
+                ai={ai}
                 playerName={playerName}
                 onPlayerName={changePlayerName}
                 playerStorageError={playerStorageError}
-                onApiKey={setApiKey}
                 folderPath={folderPath}
                 onFolderPath={setFolderPath}
                 busy={busy}
@@ -401,9 +376,7 @@ export default function App() {
               busy={busy}
               provider={provider}
               model={model}
-              hasApiKey={
-                provider === "demo" || (Boolean(apiKey.trim()) && !storageError)
-              }
+              hasApiKey={provider === "demo" || (ai.ready && !storageError)}
               onBack={() => setScreen("library")}
               onAnalyze={(consent) => void analyze(selectedReplay, consent)}
               onSettings={openSettings}

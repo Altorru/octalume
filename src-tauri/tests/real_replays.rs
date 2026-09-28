@@ -1,4 +1,4 @@
-use octalume_lib::{metadata, replays};
+use octalume_lib::{gameplay, metadata, player, replays};
 use std::{fs, path::PathBuf};
 
 fn fixture_folder() -> PathBuf {
@@ -104,4 +104,143 @@ fn corrupted_crc_and_truncated_replay_are_rejected() {
     corrupt[last] ^= 0xFF;
     assert!(metadata::parse_bytes(&corrupt).is_err());
     assert!(metadata::parse_bytes(&bytes[..bytes.len() / 2]).is_err());
+}
+
+#[test]
+#[ignore = "Download public fixtures with npm run fixtures:download first"]
+fn reconstructs_gameplay_for_selected_players_without_private_strings() {
+    for file in ["epic.replay", "rlcs.replay", "rumble.replay"] {
+        let path = fixture_folder().join(file);
+        let metadata = metadata::parse_file(&path).unwrap();
+        let index = metadata
+            .players
+            .iter()
+            .position(|p| !p.is_bot && p.team.is_some())
+            .unwrap();
+        let p = &metadata.players[index];
+        let target = player::PlayerTarget {
+            index,
+            name: p.name.clone(),
+            team: p.team,
+        };
+        if file != "epic.replay" {
+            let error = gameplay::parse_file(&path, &target).unwrap_err();
+            assert!(error.contains("Ancien format réseau"));
+            continue;
+        }
+        let (_, dossier) = gameplay::parse_file(&path, &target).unwrap();
+        assert!(dossier.quality.decoded_frames > 1000);
+        assert!(dossier.quality.target_observed_seconds > 60.0);
+        assert!(dossier.quality.coverage_percent >= 80.0);
+        assert!(dossier.quality.complete_spatial_percent >= 70.0);
+        assert!(dossier.quality.can_assess);
+        assert!(
+            dossier
+                .metrics
+                .iter()
+                .find(|m| m.key == "meanSpeed")
+                .unwrap()
+                .value
+                .unwrap()
+                > 200.0
+        );
+        assert!(dossier
+            .metrics
+            .iter()
+            .find(|m| m.key == "meanBoost")
+            .unwrap()
+            .value
+            .is_some_and(|v| (0.0..=100.0).contains(&v)));
+        assert!(dossier.timeline.len() > 100);
+        assert_eq!(dossier.timeline[0].time, 0.0);
+        assert!(
+            (dossier.timeline.last().unwrap().time - dossier.quality.recording_seconds).abs() < 0.2
+        );
+        assert_eq!(
+            dossier
+                .evidence
+                .iter()
+                .filter(|e| e.kind.ends_with("_goal"))
+                .count(),
+            2
+        );
+        assert!(dossier
+            .evidence
+            .iter()
+            .filter(|e| e.kind.ends_with("_goal"))
+            .all(|e| e.kind
+                == if target.team == Some(1) {
+                    "team_goal"
+                } else {
+                    "opponent_goal"
+                }));
+        assert!(dossier
+            .evidence
+            .iter()
+            .any(|e| e.kind == "shot_counter_increase"));
+        let serialized = serde_json::to_string(&dossier).unwrap();
+        for player in &metadata.players {
+            assert!(!serialized.contains(&player.name));
+        }
+        assert!(!serialized.contains("UniqueId"));
+        println!(
+            "{file}: frames={} coverage={} spatial={} samples={} evidence={} payloadBytes={}",
+            dossier.quality.decoded_frames,
+            dossier.quality.coverage_percent,
+            dossier.quality.complete_spatial_percent,
+            dossier.timeline.len(),
+            dossier.evidence.len(),
+            serialized.len()
+        );
+    }
+}
+
+#[test]
+#[ignore = "Download public fixtures with npm run fixtures:download first"]
+fn network_metrics_remain_bound_to_each_of_the_six_players() {
+    let path = fixture_folder().join("epic.replay");
+    let metadata = metadata::parse_file(&path).unwrap();
+    let mut means = std::collections::HashSet::new();
+    for (index, p) in metadata.players.iter().enumerate() {
+        let target = player::PlayerTarget {
+            index,
+            name: p.name.clone(),
+            team: p.team,
+        };
+        let (_, dossier) = gameplay::parse_file(&path, &target).unwrap();
+        assert_eq!(dossier.target, index);
+        assert!(dossier.quality.target_observed_seconds > 60.0);
+        assert!((0.0..=100.0).contains(&dossier.quality.coverage_percent));
+        if dossier.quality.coverage_percent < 90.0 {
+            assert!(!dossier.quality.can_assess);
+        }
+        println!(
+            "targetIndex={index} targetCoverage={} spatialCoverage={}",
+            dossier.quality.coverage_percent, dossier.quality.complete_spatial_percent
+        );
+        assert!(
+            dossier
+                .metrics
+                .iter()
+                .find(|m| m.key == "meanSpeed")
+                .unwrap()
+                .value
+                .unwrap()
+                > 200.0
+        );
+        means.insert(
+            dossier
+                .metrics
+                .iter()
+                .find(|m| m.key == "meanSpeed")
+                .unwrap()
+                .value
+                .unwrap()
+                .to_bits(),
+        );
+    }
+    assert!(
+        means.len() > 1,
+        "Selected player must change the measured metrics"
+    );
 }

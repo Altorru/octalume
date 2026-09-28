@@ -48,14 +48,22 @@ Utiliser les fixtures déjà téléchargées dans `.local-tests/replays` ou son 
 
 À effectuer soi-même avec sa clé, jamais dans une issue ou cette conversation :
 
-- Choisir OpenAI, Gemini ou Claude, vérifier le modèle accessible au compte et saisir sa clé API dans l'application.
+- Choisir OpenAI, Gemini ou Claude et saisir sa clé API dans l'application. Aucun appel ne doit partir pendant la saisie.
+- Cliquer sur « Enregistrer et récupérer les modèles » : chargement, puis liste provenant du fournisseur. Aucune analyse ni donnée de replay ne doit être envoyée.
+- Choisir un modèle dans la liste puis cliquer sur « Enregistrer le modèle » : le statut devient « Prêt ». Avant cette confirmation, l'analyse reste désactivée.
+- Modifier la clé : l'ancien catalogue doit disparaître et le statut prêt être retiré. Réenregistrer la clé puis le modèle.
+- Une erreur de clé, réseau ou catalogue vide doit laisser l'analyse désactivée et permettre une nouvelle tentative.
+- Pendant le chargement, un double clic ne doit pas lancer une deuxième récupération et le fournisseur ne doit pas pouvoir changer.
 - Revenir au match et sélectionner son joueur. Sans accord d'envoi coché, l'analyse doit être désactivée.
 - Cocher le consentement, puis changer de joueur ou de modèle : l'ancien accord ne doit plus autoriser l'envoi.
 - Confirmer l'envoi et analyser. Vérifier le fournisseur, le modèle et le joueur du rapport.
-- Le score de gameplay réel doit indiquer « Non évaluable avec ces données ». Les métriques affichées doivent correspondre aux compteurs du joueur, jamais aux métriques fictives de la démo.
+- Cliquer sur « Extraire le gameplay » sans clé : les métriques locales, couverture et séquences doivent apparaître sans appel réseau. Comparer ces chiffres avec les métriques du rapport IA : ils ne doivent pas être remplacés par des nombres produits par le modèle.
+- Le score réel, s'il est présent, doit être accompagné d'une justification et de l'avertissement d'appréciation subjective non calibrée. Couverture insuffisante ou arène non validée : notes retirées.
+- Chaque mistake doit afficher un timestamp du replay, une référence de séquence, observation locale, impact, correction, exercice et confiance. Les signaux de proximité ne doivent pas être affichés comme des double commits automatiquement prouvés.
+- Vérifier le plan d'entraînement, les dimensions de coaching et la prise en compte de la bonne équipe (orange peut avoir gagné avec deux buts et un score bleu/orange 1–2).
 - Essayer une clé fictive uniquement si l'on accepte un appel rejeté : une erreur doit apparaître, sans faux succès de démonstration.
 - Changer de fournisseur : aucune clé du fournisseur précédent ne doit être affichée ou envoyée à l'autre.
-- Fermer complètement l'application et la rouvrir : aucune clé ne doit être retrouvée. Le pseudo, le dossier et le choix du fournisseur restent mémorisés.
+- Fermer complètement l'application et la rouvrir : aucune clé ni liste ne doit être retrouvée. Le pseudo, le dossier, le fournisseur et le dernier modèle confirmé restent mémorisés. Après récupération avec la nouvelle clé, ce modèle n'est proposé que s'il figure toujours au catalogue ; il faut le confirmer de nouveau.
 - Ne pas diffuser de captures contenant les clés. Les valeurs des champs secrets ne doivent pas être journalisées.
 
 ## États d'erreur et réglages
@@ -76,4 +84,4 @@ Utiliser les fixtures déjà téléchargées dans `.local-tests/replays` ou son 
 
 ## Limites
 
-Ce parcours est une checklist, pas une preuve de tests exécutés. Le mode démonstration est fictif et local ; les modes OpenAI, Gemini et Claude effectuent de vrais appels avec les statistiques uniquement après consentement. Aucun fichier replay n'est envoyé. Le gameplay frame par frame n'est pas analysé. « En ligne » ne certifie pas un match classé ; les durées estimées concernent l'enregistrement.
+Ce parcours est une checklist, pas une preuve de tests exécutés. Le mode démonstration est fictif et local. Les fournisseurs réels reçoivent, après consentement, un dossier gameplay avec métriques et contexte pseudonymisé des autres joueurs, pas le fichier replay. Les agrégats utilisent les frames actives observables ; la chronologie envoyée est échantillonnée. Boost répliqué et signaux de rotation ont des limites explicites ; aucun coaching professionnel calibré n'est revendiqué. Les anciens replays RLCS/Rumble des fixtures sont refusés pour le coaching réseau tant que leurs conversions d'unités ne sont pas validées ; leurs en-têtes restent consultables. « En ligne » ne certifie pas un match classé.

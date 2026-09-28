@@ -1760,3 +1760,101 @@ button:disabled {
     gap: 9px;
   }
 }
+.ai-setup-step {
+  padding-block: 18px;
+  border-bottom: 1px solid var(--border, #263530);
+}
+
+.setup-step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #173a2e;
+  color: #9decc5;
+  font-size: 12px;
+}
+
+select.input {
+  font: inherit;
+  color-scheme: dark;
+}
+.gameplay-panel {
+  margin-top: 20px;
+}
+
+.gameplay-details {
+  margin-top: 16px;
+  padding: 14px 0;
+  border-top: 1px solid #263530;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.gameplay-details summary,
+.gameplay-metrics summary,
+.coaching-finding summary {
+  cursor: pointer;
+}
+
+.training-markdown > * + * {
+  margin-top: 0.45rem;
+}
+.training-markdown ul {
+  list-style: disc;
+  padding-left: 1.1rem;
+}
+.training-markdown ol {
+  list-style: decimal;
+  padding-left: 1.1rem;
+}
+.training-markdown li + li {
+  margin-top: 0.25rem;
+}
+.training-markdown strong {
+  color: rgb(226 232 240);
+}
+.training-markdown code {
+  border-radius: 0.3rem;
+  background: rgb(255 255 255 / 0.08);
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
+}
+
+.gameplay-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.gameplay-metrics > div {
+  padding: 14px;
+  border: 1px solid #263530;
+  border-radius: 12px;
+}
+
+.gameplay-metrics dt {
+  color: #9baca4;
+}
+
+.gameplay-metrics dd {
+  margin: 8px 0;
+  font-size: 20px;
+}
+
+.gameplay-evidence {
+  padding-left: 20px;
+}
+
+.gameplay-evidence li,
+.gameplay-details > ul li {
+  margin-top: 14px;
+}
+
+.coaching-finding + .coaching-finding {
+  border-top: 1px solid rgb(251 113 133 / 20%);
+  padding-top: 20px;
+}

@@ -1,6 +1,8 @@
 mod ai;
 mod analysis_gate;
+pub mod gameplay;
 pub mod metadata;
+mod model_catalog;
 pub mod player;
 pub mod replays;
 mod report;
@@ -41,6 +43,32 @@ async fn scan_replays(
 }
 
 #[tauri::command]
+async fn list_ai_models(
+    provider: ai::AiProvider,
+    api_key: String,
+) -> Result<Vec<model_catalog::AiModel>, String> {
+    model_catalog::list(provider, api_key).await
+}
+
+#[tauri::command]
+async fn get_replay_gameplay(
+    file_path: String,
+    player_target: player::PlayerTarget,
+    index: State<'_, ReplayIndex>,
+    gate: State<'_, analysis_gate::AnalysisGate>,
+) -> Result<gameplay::GameplayPreview, String> {
+    let _permit = gate.acquire()?;
+    index.ensure_allowed(&file_path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        replays::validate_replay(&file_path)?;
+        let (_, dossier) = gameplay::parse_file(std::path::Path::new(&file_path), &player_target)?;
+        Ok(dossier.preview())
+    })
+    .await
+    .map_err(|_| "L'extraction du gameplay a échoué.".to_string())?
+}
+
+#[tauri::command]
 async fn analyze_replay(
     file_path: String,
     ai_config: ai::AiConfig,
@@ -51,9 +79,16 @@ async fn analyze_replay(
     let _permit = gate.acquire()?;
     ai_config.validate()?;
     index.ensure_allowed(&file_path)?;
-    let metadata = tauri::async_runtime::spawn_blocking(move || {
+    let parse_target = player_target.clone();
+    let demo = ai_config.provider == ai::AiProvider::Demo;
+    let (metadata, dossier) = tauri::async_runtime::spawn_blocking(move || {
         replays::validate_replay(&file_path)?;
-        metadata::parse_file(std::path::Path::new(&file_path))
+        if demo {
+            metadata::parse_file(std::path::Path::new(&file_path)).map(|metadata| (metadata, None))
+        } else {
+            gameplay::parse_file(std::path::Path::new(&file_path), &parse_target)
+                .map(|(metadata, dossier)| (metadata, Some(dossier)))
+        }
     })
     .await
     .map_err(|error| format!("La vérification a échoué : {error}"))??;
@@ -62,7 +97,13 @@ async fn analyze_replay(
         tokio::time::sleep(Duration::from_secs(2)).await;
         Ok(CoachingReport::demo(metadata.game_type, player_target))
     } else {
-        ai::analyze(ai_config, metadata, player_target).await
+        ai::analyze(
+            ai_config,
+            metadata,
+            player_target,
+            dossier.ok_or_else(|| "Gameplay non préparé.".to_string())?,
+        )
+        .await
     }
 }
 
@@ -74,6 +115,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_replay_folder_path,
             scan_replays,
+            list_ai_models,
+            get_replay_gameplay,
             analyze_replay
         ])
         .run(tauri::generate_context!())

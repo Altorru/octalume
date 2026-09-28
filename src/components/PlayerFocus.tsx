@@ -119,8 +119,8 @@ export default function PlayerFocus({
         </dl>
       )}
       <p className="player-focus-note">
-        Statistiques réelles de l’en-tête. L’IA analyse ces compteurs, pas
-        encore le gameplay frame par frame.
+        Compteurs réels de l’en-tête. Le coaching ajoute les frames réseau, les
+        métriques locales et le contexte des autres joueurs.
       </p>
     </section>
   );

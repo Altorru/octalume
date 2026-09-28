@@ -1,14 +1,12 @@
 export const providers = {
-  demo: { label: "Démonstration locale", model: "", host: "Aucun envoi" },
-  openai: { label: "OpenAI", model: "gpt-4.1-mini", host: "api.openai.com" },
+  demo: { label: "Démonstration locale", host: "Aucun envoi" },
+  openai: { label: "OpenAI", host: "api.openai.com" },
   gemini: {
     label: "Google Gemini",
-    model: "gemini-2.5-flash",
     host: "generativelanguage.googleapis.com",
   },
   claude: {
     label: "Anthropic Claude",
-    model: "claude-sonnet-5",
     host: "api.anthropic.com",
   },
 } as const;
