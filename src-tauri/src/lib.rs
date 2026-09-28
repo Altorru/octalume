@@ -1,4 +1,5 @@
-mod replays;
+pub mod metadata;
+pub mod replays;
 mod report;
 
 use replays::{ReplayFile, ReplayIndex};
@@ -46,12 +47,15 @@ async fn analyze_replay(
         return Err("Renseigne une clé API pour tester l'analyse.".into());
     }
     index.ensure_allowed(&file_path)?;
-    tauri::async_runtime::spawn_blocking(move || replays::validate_replay(&file_path))
-        .await
-        .map_err(|error| format!("La vérification a échoué : {error}"))??;
+    let metadata = tauri::async_runtime::spawn_blocking(move || {
+        replays::validate_replay(&file_path)?;
+        metadata::parse_file(std::path::Path::new(&file_path))
+    })
+    .await
+    .map_err(|error| format!("La vérification a échoué : {error}"))??;
     // Simulation : aucun réseau, aucune validation réelle de clé.
     tokio::time::sleep(Duration::from_secs(2)).await;
-    Ok(CoachingReport::demo())
+    Ok(CoachingReport::demo(metadata.game_type))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -1,3 +1,4 @@
+use crate::metadata::{self, ReplayMetadata};
 use serde::Serialize;
 use std::{collections::HashSet, fs, path::Path, sync::Mutex, time::UNIX_EPOCH};
 
@@ -8,6 +9,7 @@ impl ReplayIndex {
     pub fn replace(&self, replays: &[ReplayFile]) -> Result<(), String> {
         let paths = replays
             .iter()
+            .filter(|replay| replay.metadata.is_some() && replay.parse_error.is_none())
             .map(|replay| replay.file_path.clone())
             .collect();
         *self
@@ -38,6 +40,8 @@ pub struct ReplayFile {
     pub modified_at: u64,
     pub size_bytes: u64,
     pub game_type: Option<String>,
+    pub metadata: Option<ReplayMetadata>,
+    pub parse_error: Option<String>,
 }
 
 pub fn path_string(path: &Path) -> Result<String, String> {
@@ -71,22 +75,28 @@ pub fn scan_directory(path: &str) -> Result<Vec<ReplayFile>, String> {
         if !file_type.is_file() || !is_replay(&file_path) {
             continue;
         }
-        let metadata = entry
+        let file_metadata = entry
             .metadata()
             .map_err(|error| format!("Métadonnées inaccessibles : {error}"))?;
-        let modified_at = metadata
+        let modified_at = file_metadata
             .modified()
             .map_err(|error| format!("Date inaccessible : {error}"))?
             .duration_since(UNIX_EPOCH)
             .map_err(|_| "Date du fichier antérieure à 1970.".to_string())?
             .as_secs();
+        let (metadata, parse_error) = match metadata::parse_file(&file_path) {
+            Ok(parsed) => (Some(parsed), None),
+            Err(error) => (None, Some(error)),
+        };
+        let game_type = metadata.as_ref().map(|parsed| parsed.game_type.clone());
         replays.push(ReplayFile {
             file_name: entry.file_name().to_string_lossy().into_owned(),
             file_path: path_string(&file_path)?,
             modified_at,
-            size_bytes: metadata.len(),
-            // TODO : parser l'en-tête avec boxcars ; aucune donnée inventée ici.
-            game_type: None,
+            size_bytes: file_metadata.len(),
+            game_type,
+            metadata,
+            parse_error,
         });
     }
     replays.sort_by(|left, right| {
@@ -145,6 +155,7 @@ mod tests {
         assert_eq!(files[1].file_name, "old.replay");
         assert_eq!(files[0].size_bytes, 6);
         assert!(files[0].game_type.is_none());
+        assert!(files[0].parse_error.is_some());
     }
 
     #[test]
@@ -160,7 +171,7 @@ mod tests {
     fn analysis_rejects_unlisted_empty_or_deleted_files() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("a.replay");
-        fs::write(&file, b"data").unwrap();
+        fs::write(&file, crate::metadata::tests::minimal_replay()).unwrap();
         let index = ReplayIndex::default();
         let files = scan_directory(dir.path().to_str().unwrap()).unwrap();
         let path = &files[0].file_path;

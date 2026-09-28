@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import CoachingReport from "./components/CoachingReport";
+import ReplayDetails, { formatDuration } from "./components/ReplayDetails";
 import type { CoachingReportData, ReplayFile } from "./types";
 import "./App.css";
 
@@ -42,6 +43,7 @@ export default function App() {
   const [analyzingPath, setAnalyzingPath] = useState<string | null>(null);
   const [report, setReport] = useState<CoachingReportData | null>(null);
   const [reportFile, setReportFile] = useState("");
+  const [selectedReplay, setSelectedReplay] = useState<ReplayFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<Date | null>(null);
@@ -95,6 +97,7 @@ export default function App() {
     setScanning(true);
     setError(null);
     setReport(null);
+    setSelectedReplay(null);
     setReplays([]);
     setLastScan(null);
     try {
@@ -120,6 +123,7 @@ export default function App() {
     setAnalyzingPath(replay.filePath);
     setError(null);
     setReport(null);
+    setSelectedReplay(replay);
     try {
       const result = await invoke<CoachingReportData>("analyze_replay", {
         filePath: replay.filePath,
@@ -326,7 +330,20 @@ export default function App() {
                         className="border-t border-white/5"
                       >
                         <td className="max-w-48 break-all p-4 font-medium">
-                          {replay.fileName}
+                          {replay.metadata?.replayName || replay.fileName}
+                          {replay.metadata && (
+                            <p className="mt-1 text-xs font-normal text-slate-500">
+                              {replay.metadata.blueScore ?? "—"} –{" "}
+                              {replay.metadata.orangeScore ?? "—"} ·{" "}
+                              {replay.metadata.durationIsEstimate ? "≈ " : ""}
+                              {formatDuration(replay.metadata.durationSeconds)}
+                            </p>
+                          )}
+                          {replay.parseError && (
+                            <p className="mt-2 text-xs font-normal leading-relaxed text-rose-300">
+                              {replay.parseError}
+                            </p>
+                          )}
                         </td>
                         <td className="whitespace-nowrap p-4 text-xs text-slate-400">
                           {new Date(replay.modifiedAt * 1000).toLocaleString(
@@ -337,13 +354,26 @@ export default function App() {
                           {(replay.sizeBytes / 1024 / 1024).toFixed(2)} Mio
                         </td>
                         <td className="p-4 text-slate-400">
-                          {replay.gameType ?? "À extraire"}
+                          {replay.gameType ?? "Illisible"}
                         </td>
                         <td className="p-4">
                           <button
                             type="button"
+                            disabled={!replay.metadata || busy}
+                            onClick={() => setSelectedReplay(replay)}
+                            className="mb-2 block text-xs text-cyan-300 hover:text-cyan-200 disabled:opacity-40"
+                          >
+                            Détails du match
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => void analyze(replay)}
-                            disabled={busy || !apiKey.trim()}
+                            disabled={
+                              busy ||
+                              !apiKey.trim() ||
+                              !replay.metadata ||
+                              Boolean(replay.parseError)
+                            }
                             className="button-primary"
                           >
                             {analyzingPath === replay.filePath ? (
@@ -385,6 +415,12 @@ export default function App() {
                 </div>
               )}
             </div>
+            {selectedReplay && (
+              <ReplayDetails
+                replay={selectedReplay}
+                onClose={() => setSelectedReplay(null)}
+              />
+            )}
           </section>
         </div>
         <div aria-live="polite">
@@ -395,9 +431,9 @@ export default function App() {
               </h2>
               {report.isMock && (
                 <p className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm text-amber-300">
-                  Rapport de démonstration : les données ci-dessous sont
-                  fictives et identiques pour tous les replays. Aucun appel à
-                  une API n'a eu lieu.
+                  Le type de match provient du replay. Le score de coaching, les
+                  conseils et les métriques avancées restent fictifs pour cette
+                  démonstration. Aucun appel à une API n'a eu lieu.
                 </p>
               )}
               <CoachingReport report={report} />

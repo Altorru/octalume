@@ -19,9 +19,15 @@ Aucun watcher, polling périodique, service résident ou lancement automatique a
 - Dossier personnalisable et mémorisé après un scan réussi.
 - Scan non récursif des fichiers `.replay`, triés par modification décroissante.
 - Dates et tailles réelles du disque. La date affichée est celle du fichier, pas celle du match.
-- Analyse simulée : délai asynchrone de deux secondes, rapport fictif explicitement signalé.
+- Parsing réel boxcars : nom, carte, date, score, effectif enregistré et statistiques des joueurs.
+- Contrôle CRC et limite de lecture de 128 Mio par fichier. Un replay illisible reste visible avec son erreur ; il ne bloque pas les autres.
+- Analyse de coaching simulée : délai asynchrone de deux secondes, conseils fictifs explicitement signalés. Le type de match provient du replay.
 - Seuls les fichiers du dernier scan réussi peuvent être sélectionnés pour l'analyse.
-- Dépendance boxcars installée ; extraction de l'en-tête et des données réseau à implémenter.
+- Les frames réseau ne sont pas décodées : boost, vitesse, rotations et erreurs de jeu ne sont pas encore calculés.
+
+Le format « 3v3 observé » correspond aux effectifs présents dans `PlayerStats`, pas à une playlist certifiée. `TeamSize` peut désigner la capacité du lobby ; les départs et remplacements peuvent aussi modifier les effectifs enregistrés. « Online » ne prouve pas qu'un match est classé.
+
+Les durées calculées avec `NumFrames / RecordFPS` sont affichées comme des estimations de l'enregistrement, pas comme des durées certifiées de match. Les champs manquants restent inconnus.
 
 ## Approche « EAC Safe »
 
@@ -81,14 +87,34 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-Les tests Rust vérifient le filtrage, le tri, les dossiers invalides et le rejet des fichiers non sélectionnés, vides, supprimés ou liés symboliquement (test des liens sur Unix).
+Les tests Rust vérifient le filtrage, le tri, les dossiers invalides, les limites de taille, les CRC et le rejet des fichiers non sélectionnés, vides, supprimés ou liés symboliquement (test des liens sur Unix).
+
+## Tester avec des replays réels sur Mac
+
+```bash
+npm run fixtures:download
+npm run test:replays
+npm run tauri dev
+```
+
+Dans l'application, renseignez le chemin absolu vers `.local-tests/replays`, rafraîchissez, puis ouvrez « Détails du match ». Entrez une clé fictive non vide pour tester le rapport de démonstration.
+
+Le script télécharge trois replays publics du [dépôt officiel boxcars](https://github.com/nickbabcock/boxcars/tree/9f31dfa120b37e5a8a649942170b3a2ca8235ff1/assets/replays/good). La révision, les tailles et les SHA-256 sont fixés dans le script. Les fichiers téléchargés sont exclus de Git et ne sont pas redistribués par ce projet. Voir [la provenance des fixtures](docs/test-fixtures.md).
+
+Les tests d'intégration vérifient des cartes, scores et statistiques connus ainsi que l'isolation des fichiers invalides. Ils sont ignorés dans `cargo test` par défaut ; `npm run test:replays` les active après téléchargement. La CI les exécute aussi.
+
+Pour inspecter les métadonnées depuis le terminal :
+
+```bash
+cargo run --manifest-path src-tauri/Cargo.toml --example inspect_replays -- .local-tests/replays
+```
 
 ## Compiler pour Windows
 
 Depuis Windows :
 
 ```bash
-npm run tauri build -- --bundles msi,nsis --locked
+npm run tauri build -- --bundles msi,nsis -- --locked
 ```
 
 Installateurs : `src-tauri/target/release/bundle/msi/` et `src-tauri/target/release/bundle/nsis/`.
@@ -102,9 +128,11 @@ Versionnez `package-lock.json` et `src-tauri/Cargo.lock`.
 ```text
 src/App.tsx                         Dashboard et appels IPC
 src/components/CoachingReport.tsx   Rapport de coaching
+src/components/ReplayDetails.tsx    Métadonnées et statistiques du match
 src/types.ts                        Contrat frontend
 src-tauri/src/lib.rs                 Commandes Tauri
 src-tauri/src/replays.rs             Scan, validation et index des fichiers
+src-tauri/src/metadata.rs            Parsing boxcars et normalisation des métadonnées
 src-tauri/src/report.rs              Rapport simulé
 .github/workflows/build.yml          Vérifications et installateurs Windows
 ```
@@ -113,7 +141,7 @@ L'ordre du rapport est : score, Game Type, échecs, résumé IA, points forts/fa
 
 ## Avant une première release publique
 
-- Implémenter le parsing boxcars et le choix du joueur concerné.
+- Ajouter le choix du joueur concerné et le parsing des frames réseau pour les métriques avancées.
 - Connecter l'API depuis Rust avec délais limites et gestion des erreurs.
 - Sécuriser le stockage de la clé utilisateur.
 - Valider le parcours sur Windows et signer les installateurs.

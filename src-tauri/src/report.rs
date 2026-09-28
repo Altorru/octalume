@@ -20,10 +20,10 @@ pub struct CoachingReport {
 }
 
 impl CoachingReport {
-    pub fn demo() -> Self {
+    pub fn demo(game_type: String) -> Self {
         Self {
             score: 82,
-            game_type: "2v2 Ranked".into(),
+            game_type,
             mistakes: vec![
                 "Double commit en défense à 02:14.".into(),
                 "Dernier défenseur : challenge trop tôt à 03:42.".into(),

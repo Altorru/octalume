@@ -12,6 +12,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
+    "fixtures:download": "node scripts/download-test-replays.mjs",
+    "test:replays": "cargo test --manifest-path src-tauri/Cargo.toml --locked --test real_replays -- --include-ignored",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "tauri": "tauri"

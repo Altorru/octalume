@@ -44,8 +44,12 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
       - name: Test replay scanner
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Download public test replays
+        run: npm run fixtures:download
+      - name: Test real replay parsing
+        run: npm run test:replays
       - name: Build Windows installers
-        run: npm run tauri build -- --bundles msi,nsis --locked
+        run: npm run tauri build -- --bundles msi,nsis -- --locked
       - name: Upload installers
         uses: actions/upload-artifact@v7
         with:
